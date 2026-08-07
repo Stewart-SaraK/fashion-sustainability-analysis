@@ -1,0 +1,450 @@
+---
+title: "Capstone Project"
+output: html_document
+date: "2025-09-26"
+---
+
+Importing Data:
+```{r}
+library(readxl)
+data <- read_excel("C:/Users/stewa/OneDrive/Documents/Abr_Data.xlsx")
+head(data)
+
+fulldata <- read_excel("C:/Users/stewa/OneDrive/Documents/Final_Data.xlsx")
+head(fulldata)
+```
+
+New Model w/ Transparencies removed
+```{r}
+ps_model2 <- glm(Treated ~ G_Trend + GOY_Plant + GOY_People + GOY_Animals,
+                data = data, family = binomial)
+
+summary(ps_model2)
+
+# add propensity scores to dataset
+data$propensity_score <- predict(ps_model2, newdata = data, type = "response")
+
+# Quick look
+data[, c("Brand", "Treated", "propensity_score")]
+
+```
+
+
+Matching them
+```{r}
+library(MatchIt)
+
+m.out <- matchit(Treated ~ Revenue + Stock + G_Trend +
+                   GOY_Plant + GOY_People + GOY_Animals,
+                 data = data,
+                 method = "nearest", distance = data$propensity_score)
+
+summary(m.out)
+
+matched_data <- match.data(m.out)
+head(matched_data)
+
+matched_data[, c("Brand", "Treated", "propensity_score", "subclass")]
+
+```
+
+Matched Pairs Revenue 
+```{r}
+library(dplyr)
+# Keep the matching assignments
+matching_info <- matched_data %>%
+  select(Brand, Treated, subclass)
+
+# Merge onto full dataset
+final_matched_rev <- fulldata %>%
+  left_join(matching_info, by = c("Brand", "Treated"))
+
+rev_diffs_all <- final_matched_rev %>%
+  group_by(subclass, Relative_Year) %>%
+  summarize(
+    diff = Revenue[Treated == 1] - Revenue[Treated == 0],
+    .groups = "drop"
+  )
+
+mean(rev_diffs_all$diff, na.rm = TRUE)
+
+t.test(rev_diffs_all$diff)
+```
+
+Matched Pairs Stock
+```{r}
+# Keep only the matching info from matched_data (brand + subclass + treatment)
+matching_info <- matched_data %>%
+  select(Brand, subclass, Treated)
+
+# Merge back onto finaldata which has all Relative_Year values
+final_matched <- fulldata %>%
+  left_join(matching_info, by = c("Brand", "Treated"))
+
+stock_diffs_all <- final_matched %>%
+  group_by(subclass, Relative_Year) %>% 
+  summarize(
+    diff = Stock[Treated == 1] - Stock[Treated == 0],
+    .groups = "drop"
+  )
+
+mean(stock_diffs_all$diff, na.rm = TRUE)
+
+t.test(stock_diffs_all$diff)
+
+```
+```{r}
+# Keep only the matching info from matched_data (brand + subclass + treatment)
+matching_info <- matched_data %>%
+  select(Brand, subclass, Treated)
+
+# Merge back onto finaldata which has all Relative_Year values
+final_matched <- fulldata %>%
+  left_join(matching_info, by = c("Brand", "Treated"))
+
+gtrend_diffs_all <- final_matched %>%
+  group_by(subclass, Relative_Year) %>% 
+  summarize(
+    diff = G_Trend[Treated == 1] - G_Trend[Treated == 0],
+    .groups = "drop"
+  )
+
+mean(gtrend_diffs_all$diff, na.rm = TRUE)
+
+t.test(gtrend_diffs_all$diff)
+```
+
+DiD set up
+```{r}
+library(readxl)
+library(dplyr)
+library(fixest)
+
+#--------------------------------------------------
+# 1. Read and prepare data
+#--------------------------------------------------
+fulldata <- read_excel("C:/Users/stewa/OneDrive/Documents/Final_Data.xlsx")
+
+df <- fulldata %>%
+  mutate(
+    # Make sure Treated is 0/1
+    Treated      = as.integer(Treated == 1),
+
+    # Clean DiD "Post" indicator: 1 from Relative_Year >= 0 onward, 0 before
+    Post         = as.integer(Relative_Year >= 0),
+
+    # Factors and IDs
+    Brand        = factor(Brand),
+    Year         = as.integer(Year),
+    Matched_Pair = factor(Matched_Pair),
+
+    # Outcomes (ensure values are > 0 in your data)
+    log_rev      = log(Revenue),
+    log_stock    = log(Stock)  # use if Stock > 0; otherwise adjust
+  )
+
+#--------------------------------------------------
+# 2. Create a clean dataset for DiD (only vars we need)
+#   This avoids dropping rows because of NAs in other columns
+#--------------------------------------------------
+df_did <- df %>%
+  select(
+    Brand, Year, Relative_Year,
+    Treated, Post, Matched_Pair,
+    log_rev, log_stock
+  ) %>%
+  # drop rows where the actual outcome or key indicators are NA
+  filter(!is.na(log_rev),
+         !is.na(log_stock),
+         !is.na(Treated),
+         !is.na(Post),
+         !is.na(Relative_Year))
+
+# Quick sanity checks
+summary(df_did$Post)
+table(df_did$Treated, df_did$Post, useNA = "ifany")
+nrow(df_did)
+
+#--------------------------------------------------
+# 3. Main DiD: Revenue (log scale)
+#   log(Revenue) ~ Treated * Post + Brand FE + Year FE
+#--------------------------------------------------
+did_rev <- feols(
+  log_rev ~ Treated * Post | Brand + Year,
+  cluster = ~ Brand,
+  data    = df_did
+)
+
+summary(did_rev)
+
+#--------------------------------------------------
+# 4. Main DiD: Stock (log scale)
+#   log(Stock) ~ Treated * Post + Brand FE + Year FE
+#--------------------------------------------------
+did_stock <- feols(
+  log_stock ~ Treated * Post | Brand + Year,
+  cluster = ~ Brand,
+  data    = df_did
+)
+
+summary(did_stock)
+```
+
+DiD Revenue and Stock
+```{r}
+#--------------------------------------------------
+# 5. OPTIONAL: Add matched-pair fixed effects
+#--------------------------------------------------
+did_rev_pair <- feols(
+  log_rev ~ Treated * Post | Brand + Year + Matched_Pair,
+  cluster = ~ Brand,
+  data    = df_did
+)
+
+summary(did_rev_pair)
+
+did_stock_pair <- feols(
+  log_stock ~ Treated * Post | Brand + Year + Matched_Pair,
+  cluster = ~ Brand,
+  data    = df_did
+)
+
+summary(did_stock_pair)
+library(fixest)
+library(broom)
+library(data.table)  # for %like%
+
+#--------------------------------------------------
+# 6. Event-study (dynamic DiD) for Revenue
+#--------------------------------------------------
+did_event_rev <- feols(
+  log_rev ~ i(Relative_Year, Treated, ref = -1) | Brand + Year,
+  cluster = ~ Brand,
+  data = df_did
+)
+
+# ??? FULL coefficient table WITH p-values
+rev_table <- summary(did_event_rev)$coeftable
+print(rev_table)
+
+# ??? Filter only Relative Year × Treated rows
+rev_es <- data.table(rev_table, keep.rownames = "term")[term %like% "Relative_Year"]
+print(rev_es)
+
+
+
+#--------------------------------------------------
+# Event-study plot
+#--------------------------------------------------
+iplot(
+  did_event_rev,
+  main = "Event-Study: Effect of Treatment on log(Revenue)",
+  xlab = "Relative Year (0 = commitment year)",
+  ylab = "Coefficient (vs. Relative Year -1)"
+)
+
+
+
+#--------------------------------------------------
+# 7. Event-study for Stock
+#--------------------------------------------------
+did_event_stock <- feols(
+  log_stock ~ i(Relative_Year, Treated, ref = -1) | Brand + Year,
+  cluster = ~ Brand,
+  data = df_did
+)
+
+# ??? FULL coefficient table WITH p-values
+stock_table <- summary(did_event_stock)$coeftable
+print(stock_table)
+
+# ??? Filter only Relative Year × Treated rows
+stock_es <- data.table(stock_table, keep.rownames = "term")[term %like% "Relative_Year"]
+print(stock_es)
+
+
+
+#--------------------------------------------------
+# Event-study plot
+#--------------------------------------------------
+iplot(
+  did_event_stock,
+  main = "Event-Study: Effect of Treatment on log(Stock)",
+  xlab = "Relative Year (0 = commitment year)",
+  ylab = "Coefficient (vs. Relative Year -1)"
+)
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# Revenue plot
+p_rev <- df %>%
+  group_by(Relative_Year, Treated) %>%   # changed from Year to Relative_Year
+  summarise(mean_rev = mean(log_rev, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = Relative_Year, y = mean_rev, color = factor(Treated))) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Average log(Revenue): Treated vs Control",
+    x = "Relative Year",
+    y = "Mean log(Revenue)",
+    color = "Treated"
+  ) +
+  theme_minimal()
+
+# Stock plot
+p_stock <- df %>%
+  group_by(Relative_Year, Treated) %>%   # changed from Year to Relative_Year
+  summarise(mean_stock = mean(Stock, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = Relative_Year, y = mean_stock, color = factor(Treated))) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Average Stock Returns: Treated vs Control",
+    x = "Relative Year",
+    y = "Mean Stock Return",
+    color = "Treated"
+  ) +
+  theme_minimal()
+
+p_rev
+
+p_stock
+```
+
+DiD Model
+```{r}
+#--------------------------------------------------
+# 1. Read and prepare data
+#--------------------------------------------------
+fulldata <- read_excel("C:/Users/stewa/OneDrive/Documents/Final_Data.xlsx")
+
+df <- fulldata %>%
+  mutate(
+    # Treatment + timing
+    Treated      = as.integer(Treated == 1),
+    Post         = as.integer(Relative_Year >= 0),
+
+    # IDs / factors
+    Brand        = factor(Brand),
+    Year         = as.integer(Year),
+    Matched_Pair = factor(Matched_Pair),
+
+    # Outcomes used previously
+    log_rev      = log(Revenue),
+    log_stock    = log(Stock),
+
+    # ---- NEW: G Trends outcome ----
+    # If you want raw G Trends:
+    gtrend       = G_Trend
+    # If you decide to log it instead, use:
+    # log_gtrend = log(G_Trend)
+  )
+
+#--------------------------------------------------
+# 2. Clean dataset for DiD on G Trends
+#--------------------------------------------------
+df_did_g <- df %>%
+  select(
+    Brand, Year, Relative_Year,
+    Treated, Post,
+    gtrend
+  ) %>%
+  filter(
+    !is.na(gtrend),
+    !is.na(Treated),
+    !is.na(Post),
+    !is.na(Relative_Year)
+  )
+
+# Quick sanity checks
+summary(df_did_g$gtrend)
+table(df_did_g$Treated, df_did_g$Post, useNA = "ifany")
+nrow(df_did_g)
+
+#--------------------------------------------------
+# 3. Main DiD: G Trends
+#   G_Trend ~ Treated * Post + Brand FE + Year FE
+#--------------------------------------------------
+did_gtrend <- feols(
+  gtrend ~ Treated * Post | Brand + Year,
+  cluster = ~ Brand,
+  data    = df_did_g
+)
+
+summary(did_gtrend)
+
+#--------------------------------------------------
+# 4. Event-study for G Trends
+#   Dynamic effects across Relative_Year
+#--------------------------------------------------
+did_event_gtrend <- feols(
+  gtrend ~ i(Relative_Year, Treated, ref = -1) | Brand + Year,
+  cluster = ~ Brand,
+  data    = df_did_g
+)
+
+summary(did_event_gtrend)
+
+iplot(
+  did_event_gtrend,
+  main = "Event-Study: Effect of Treatment on Google Trends",
+  xlab = "Relative Year (0 = commitment year)",
+  ylab = "Coefficient (vs. Relative Year -1)"
+)
+
+```
+
+
+Plot for G Trends
+```{r}
+# Plot average Google Trends by Treated vs Control
+p_gtrend <- df %>%
+  group_by(Relative_Year, Treated) %>%
+  summarise(mean_gtrend = mean(G_Trend, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = Relative_Year, y = mean_gtrend, color = factor(Treated))) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Average Google Trends: Treated vs Control",
+    color = "Treated",
+    y = "Mean Google Trends",
+    x = "Relative Year"
+  ) +
+  theme_minimal()
+
+p_gtrend
+```
+Transparency Graph
+```{r}
+library(ggplot2)
+library(dplyr)
+
+fulldata$Brand <- factor(fulldata$Brand, levels = sort(unique(fulldata$Brand)))
+
+ggplot(fulldata, aes(x = Relative_Year, 
+                 y = Overall_Transparency, 
+                 color = Brand, 
+                 group = Brand)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = seq(min(fulldata$Relative_Year),
+                                  max(fulldata$Relative_Year), 1)) +
+  labs(title = "Transparency Scores Over Time by Brand",
+       x = "Years Relative to Sustainability Commitment",
+       y = "Overall Transparency Score",
+       color = "Brand") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold")
+  )
+```
+
