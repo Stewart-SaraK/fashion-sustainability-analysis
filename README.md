@@ -48,3 +48,8 @@ Consumer interest changed over time following sustainability announcements, no e
 - 📊 [Presentation](Fashion_Sustainability_Presentation.pdf)
 
 **Screenshots**
+Average Log Outcomes by Relative Year
+These figures illustrate the average log-transformed stock returns, revenue, and Google Trends values relative to each brand's sustainability commitment (Year 0). They provide an initial view of trends before and after the commitment prior to formal causal analysis.
+![Google Trends](images/Relative_GTrends.png)
+![Revenue](images/Relative_Revenue.png)
+![Stock Market Returns](images/Relative_Stock.png)
