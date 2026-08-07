@@ -31,9 +31,8 @@ Determine whether corporate sustainability initiatives affect:
  - Event study
 
 **Results**
-Sustainability commitments were not associated with statistically significant changes in revenue or stock returns.
-Consumer interest changed over time following sustainability announcements.
-Demonstrated application of causal inference methods to real-world business data.
+Weak evidence to support that sustainability commitments were associated with statistically significant changes in revenue or stock returns.
+Consumer interest changed over time following sustainability announcements, no evidence to support positive or negative consumer interest after sustainability commitments were executed.
 
 **Skills Demonstrated**
  - Statistical modeling
@@ -42,3 +41,10 @@ Demonstrated application of causal inference methods to real-world business data
  - Business analytics
  - Data visualization
  - Research design
+
+**Files**
+- 📄 [Final Paper](Fashion_Sustainability_Report.pdf)
+- 💻 [R Markdown Analysis](Capstone_R_Markdown.Rmd)
+- 📊 [Presentation](Fashion_Sustainability_Presentation.pdf)
+
+**Screenshots**
