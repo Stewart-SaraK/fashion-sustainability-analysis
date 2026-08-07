@@ -1,2 +1,44 @@
-# fashion-sustainability-analysis
-Analyzed the financial impact of sustainability commitments in the fashion industry using causal inference techniques. Combined financial, ESG, and consumer interest data to assess changes in revenue, stock performance, and brand engagement before and after sustainability initiatives.
+# Fashion sustainability Analysis
+
+**Overview**
+This graduate capstone investigates whether sustainability commitments by major fashion brands influence financial performance and consumer engagement using causal inference methods.
+
+**Objective**
+Determine whether corporate sustainability initiatives affect:
+ - Revenue
+ - Stock returns
+ - Consumer interest (Google Trends)
+ - Dataset
+ - Financial statements
+ - Stock price data
+ - Google Trends
+ - Good On You sustainability ratings
+ - Fashion Transparency Index
+
+**Tools**
+ - R
+ - Excel
+ - Difference-in-Differences
+ - Propensity Score Matching
+ - Event Study Analysis
+ - Data Visualization
+
+**Methods**
+ - Data cleaning
+ - Propensity score matching
+ - Difference-in-differences
+ - Fixed effects regression
+ - Event study
+
+**Results**
+Sustainability commitments were not associated with statistically significant changes in revenue or stock returns.
+Consumer interest changed over time following sustainability announcements.
+Demonstrated application of causal inference methods to real-world business data.
+
+**Skills Demonstrated**
+ - Statistical modeling
+ - Data cleaning
+ - Causal inference
+ - Business analytics
+ - Data visualization
+ - Research design
